@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: ./server
+    container_name: stage_server_api
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    container_name: stage_server_db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    image: adminer
+    container_name: stage_server_adminer
+    ports:
+      - "8081:8080"
+
+volumes:
+  db_data:
