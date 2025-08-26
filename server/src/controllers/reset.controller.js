@@ -1,26 +1,8 @@
-// src/passwordResetCode.js
-import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import pool from "./db.js";
+// src/controllers/reset.controller.js
+import pool from "../db.js";
+import { RESET_CODE_TTL_MIN, generateCode, hashCode } from "../services/reset.service.js";
+import { hashPassword } from "../services/auth.service.js";
 
-const RESET_CODE_TTL_MIN = parseInt(process.env.RESET_CODE_TTL_MIN || "15", 10);
-
-// สุ่มรหัส 6 หลัก (คงความยาวด้วย padStart)
-function generateCode() {
-  const n = crypto.randomInt(0, 1000000);
-  return String(n).padStart(6, "0"); // e.g. "039412"
-}
-
-function hashCode(code) {
-  // ใช้ sha256 กับ code + salt สั้น ๆ เพื่อไม่เก็บ plaintext ใน DB
-  return crypto.createHash("sha256").update(code).digest("hex");
-}
-
-/** POST /auth/forgot { email }
- *  - สร้างรหัส 6 หลัก
- *  - เก็บ hash + หมดอายุ
- *  - ใน dev ส่ง code กลับมาให้ทดสอบ
- */
 export async function requestPasswordCode(req, res) {
   const { email } = req.body || {};
   const genericOK = { ok: true, message: "If this email exists, we sent a verification code." };
@@ -29,9 +11,7 @@ export async function requestPasswordCode(req, res) {
   const lower = String(email).toLowerCase();
   const q = await pool.query("SELECT id FROM users WHERE email=$1 AND is_active=TRUE", [lower]);
   const user = q.rows[0];
-  if (!user) {
-    return res.json(genericOK); // ป้องกัน email enumeration
-  }
+  if (!user) return res.json(genericOK);
 
   const code = generateCode();
   const codeHash = hashCode(code);
@@ -40,9 +20,7 @@ export async function requestPasswordCode(req, res) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // ยกเลิกโค้ดเก่าที่ยังไม่ใช้
     await client.query("UPDATE password_resets SET used=TRUE WHERE user_id=$1 AND used=FALSE", [user.id]);
-    // บันทึกโค้ดใหม่
     await client.query(
       "INSERT INTO password_resets(user_id, token_hash, expires_at, used) VALUES ($1,$2,$3,FALSE)",
       [user.id, codeHash, expiresAt]
@@ -56,18 +34,38 @@ export async function requestPasswordCode(req, res) {
     client.release();
   }
 
-  // TODO(prod): ส่งอีเมลจริงแนบ code ไปที่ lower
   if (process.env.NODE_ENV !== "production") {
     return res.json({ ok: true, code, expiresInMin: RESET_CODE_TTL_MIN });
   }
   return res.json(genericOK);
 }
 
-/** POST /auth/reset-code { email, code, password }
- *  - ตรวจ email/รหัส
- *  - อัปเดตรหัสผ่านใหม่
- *  - mark โค้ดเป็น used
- */
+export async function verifyPasswordCode(req, res) {
+  const { email, code } = req.body || {};
+  if (!email || !code) return res.status(400).json({ error: "email and code required" });
+
+  const lower = String(email).toLowerCase();
+  const uq = await pool.query("SELECT id FROM users WHERE email=$1 AND is_active=TRUE", [lower]);
+  const user = uq.rows[0];
+  if (!user) return res.status(400).json({ error: "invalid email or code" });
+
+  const codeHash = hashCode(code);
+  const rq = await pool.query(
+    `SELECT id, expires_at, used
+       FROM password_resets
+      WHERE user_id=$1 AND token_hash=$2
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [user.id, codeHash]
+  );
+  const pr = rq.rows[0];
+  if (!pr) return res.status(400).json({ error: "invalid email or code" });
+  if (pr.used) return res.status(400).json({ error: "code already used" });
+  if (new Date(pr.expires_at) < new Date()) return res.status(400).json({ error: "code expired" });
+
+  return res.json({ ok: true });
+}
+
 export async function resetWithCode(req, res) {
   const { email, code, password } = req.body || {};
   if (!email || !code || !password) {
@@ -92,7 +90,7 @@ export async function resetWithCode(req, res) {
   if (pr.used) return res.status(400).json({ error: "code already used" });
   if (new Date(pr.expires_at) < new Date()) return res.status(400).json({ error: "code expired" });
 
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await hashPassword(password);
 
   const client = await pool.connect();
   try {
