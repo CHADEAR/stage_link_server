@@ -1,4 +1,7 @@
 // server/scripts/seed-admin.js
+import dotenv from "dotenv";
+dotenv.config(); // โหลดไฟล์ .env
+
 import bcrypt from "bcryptjs";
 import pool from "../src/db.js";   // << ใช้ตัวเดียวกับแอป
 
