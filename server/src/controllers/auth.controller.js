@@ -3,28 +3,26 @@ import pool from "../db.js";
 import { signAccessToken, signRefreshToken, hashPassword, comparePassword, verifyRefresh } from "../services/auth.service.js";
 
 export async function register(req, res) {
-  const { email, password } = req.body || {};
+  const { email, password, username } = req.body || {};
   if (!email || !password) {
-    return res.status(400).json({ error: "email & password required", code: "INPUT_REQUIRED" });
+    return res.status(400).json({ error: "email & password required" });
   }
   const lower = String(email).toLowerCase();
 
   const found = await pool.query("SELECT 1 FROM users WHERE email=$1", [lower]);
   if (found.rowCount) {
-    return res.status(409).json({ error: "email exists", code: "EMAIL_EXISTS" });
+    return res.status(409).json({ error: "email exists" });
   }
 
   const hash = await hashPassword(password);
   const r = await pool.query(
-    "INSERT INTO users(email, password_hash, role) VALUES($1,$2,'user') RETURNING id,email,role,created_at",
-    [lower, hash]
+    `INSERT INTO users(email, password_hash, role, username)
+     VALUES($1,$2,'user',$3)
+     RETURNING id,email,username,role,created_at`,
+    [lower, hash, username]
   );
-  const user = r.rows[0];
 
-  return res.status(201).json({
-    user,
-    message: "Registered successfully. Please login.",
-  });
+  res.status(201).json({ user: r.rows[0], message: "Registered successfully" });
 }
 
 export async function login(req, res) {
@@ -35,7 +33,7 @@ export async function login(req, res) {
 
   const lower = String(email).toLowerCase();
   const q = await pool.query(
-    "SELECT id, email, role, password_hash FROM users WHERE email=$1 AND is_active=TRUE",
+    "SELECT id, email, role, username, password_hash FROM users WHERE email=$1 AND is_active=TRUE",
     [lower]
   );
   const user = q.rows[0];
@@ -72,7 +70,7 @@ export async function login(req, res) {
   const refresh = signRefreshToken({ sub: user.id, role: user.role });
 
   res.json({
-    user: { id: user.id, email: user.email, role: user.role },
+    user: { id: user.id, email: user.email, role: user.role, username: user.username }, // ✅
     token: access,
     refreshToken: refresh
   });
@@ -102,7 +100,7 @@ export async function logout(req, res) {
         ORDER BY created_at DESC
         LIMIT 1`,
       [req.user.id]
-    ).catch(() => {});
+    ).catch(() => { });
   }
   res.json({ ok: true });
 }
