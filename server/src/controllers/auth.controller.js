@@ -61,6 +61,13 @@ export async function login(req, res) {
 
   await pool.query("UPDATE users SET last_login=NOW() WHERE id=$1", [user.id]);
 
+  // 👉 บันทึก session ใหม่ (อายุ 1 วัน; ปรับได้ตามต้องการ)
+  await pool.query(
+    `INSERT INTO sessions (user_id, expires_at, user_agent, ip_addr)
+     VALUES ($1, NOW() + interval '1 day', $2, $3)`,
+    [user.id, req.headers["user-agent"] || null, req.ip || null]
+  );
+
   const access = signAccessToken({ sub: user.id, role: user.role });
   const refresh = signRefreshToken({ sub: user.id, role: user.role });
 
@@ -84,6 +91,18 @@ export async function refresh(req, res) {
   }
 }
 
-export async function logout(_req, res) {
+export async function logout(req, res) {
+  // เพิกถอน session ล่าสุดของผู้ใช้นี้ (best-effort)
+  if (req.user?.id) {
+    await pool.query(
+      `UPDATE sessions
+          SET revoked = TRUE
+        WHERE user_id = $1
+          AND revoked = FALSE
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [req.user.id]
+    ).catch(() => {});
+  }
   res.json({ ok: true });
 }
