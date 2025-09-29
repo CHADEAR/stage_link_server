@@ -9,9 +9,11 @@ import programsRoutes from "./routes/programs.routes.js"; // 👈 NEW
 import meRoutes from "./routes/me.routes.js";             // 👈 NEW
 import errorHandler from "./middlewares/error.js";
 
+
 const app = express();
 app.use(express.json());
 app.use(cors());
+
 
 // (ครั้งแรก) สร้างตารางที่จำเป็น
 async function init() {
@@ -131,7 +133,6 @@ app.get("/health", async (_req, res) => {
 
 // routes
 app.use("/auth", authRoutes);
-app.use("/notes", notesRoutes);
 app.use("/admin", adminRoutes);        // 👈 NEW
 app.use("/programs", programsRoutes);  // 👈 NEW
 app.use("/me", meRoutes);              // 👈 NEW
