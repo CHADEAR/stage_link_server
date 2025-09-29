@@ -1,16 +1,28 @@
-# สตาร์ททุก service แบบ background
-docker compose up -d --build
+# StageLink Backend (Express + PostgreSQL)
 
-# ดูสถานะ
-docker compose ps
+## Quick Start (no Docker)
+1. Install PostgreSQL 16+ and create DB `stagelink`.
+2. `cp .env.example .env` and adjust `DATABASE_URL` if needed.
+3. `npm install`
+4. Run migration: `npm run db:migrate`
+5. Seed admin: `npm run seed:admin`
+6. `npm run dev`
 
-# ดู log ของ API
-docker compose logs -f api
+## With Docker
+1. `cp .env.example .env`
+2. `docker compose up -d`
+3. In another terminal, run migrations inside container or locally with `DATABASE_URL` pointed to the container.
+4. `npm run seed:admin`
 
-# วิธีการรันโปรเจคตั้งแต่เริ่มของแต่ละเครื่อง
-# 1.ต้องเปิดโปรแกรม docker ไว้
-# 2.ต้องเปิด pgAdmin
-# 3.เปิด vscode --> server 
-# 4.รัน server(หลังบ้าน) ด้วยคำสั่ง
-docker compose up -d --build
+## API Overview
+- POST /auth/register
+- POST /auth/login
+- POST /auth/forgot (request OTP)
+- POST /auth/reset (reset with OTP)
+- GET  /programmes (public, list programs)
+- POST /programmes (admin only, create)
+- POST /uploads/program (admin only, file + metadata)
+- GET  /users (admin only, list users)
+- POST /users/:userId/access (admin only, assign/remove per-program role)
 
+See inline comments in source files for details.
