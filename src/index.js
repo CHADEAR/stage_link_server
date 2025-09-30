@@ -15,22 +15,37 @@ import uploadsRouter from './routes/uploads.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
-// Ensure uploads dir
+// ใช้โฟลเดอร์เดียวกับ Multer
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+  ? path.resolve(process.env.UPLOAD_DIR)
+  : path.resolve('./uploads');
+
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-app.use(helmet());
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+// ✅ อนุญาต cross-origin resource สำหรับรูป/ไฟล์
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+app.use(cors({
+  origin: CORS_ORIGIN,
+  credentials: true,
+}));
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(rateLimit({ windowMs: 60_000, limit: 120 }));
 
-// Serve uploaded files statically
-app.use('/static', express.static(path.resolve(UPLOAD_DIR)));
+// ✅ เสิร์ฟไฟล์อัปโหลด พร้อมตั้ง CORP + cache header ชัดเจน
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  },
+}));
 
-app.get('/health', async (req, res) => {
+app.get('/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ ok: true });
@@ -46,4 +61,7 @@ app.use('/uploads', uploadsRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
-app.listen(PORT, () => console.log(`[API] Listening on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`[API] Listening on http://localhost:${PORT}`);
+  console.log(`[API] Upload dir: ${UPLOAD_DIR}`);
+});

@@ -1,12 +1,13 @@
 import express from "express";
-import { pool } from "../db.js";            
-import { requireAdmin, requireAuth } from "../middleware/auth.js"; 
+import { pool } from "../lib/db.js";
+import { requireAuth, requireRole } from "../lib/auth.js";
 
 const router = express.Router();
 
 /**
  * GET /programmes
- * คืนรายการ พร้อมฟิลด์เวลาใหม่
+ * คืนลิสต์โปรแกรม (active เท่านั้น) พร้อมฟิลด์เวลา
+ * หมายเหตุ: cover_image จะเป็น /uploads/<filename> ถ้ามีไฟล์อัปแล้ว
  */
 router.get("/", async (_req, res) => {
   try {
@@ -27,10 +28,10 @@ router.get("/", async (_req, res) => {
 });
 
 /**
- * POST /programmes  (admin เท่านั้น)
+ * POST /programmes  (admin)
  * body: { title, category?, description?, cover_image?, shoot_date?, start_time?, end_time? }
  */
-router.post("/", requireAdmin, async (req, res) => {
+router.post("/", requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const {
       title,
@@ -69,12 +70,20 @@ router.post("/", requireAdmin, async (req, res) => {
 
 /**
  * GET /programmes/:id/uploads
- * คืนไฟล์ที่อัปโหลดของโปรแกรมนั้น ๆ (ใช้ในหน้า Programme เพื่อเอารูป)
+ * คืนไฟล์ที่อัปโหลดของโปรแกรมนั้น ๆ
+ * - url จะเป็นพาธสาธารณะเสมอ (/uploads/<filename>)
  */
 router.get("/:id/uploads", async (req, res) => {
   try {
     const q = `
-      SELECT id, programme_id, file_path AS url, original_name, uploaded_by, created_at
+      SELECT
+        id,
+        programme_id,
+        '/uploads/' || file_path AS url,   -- คืนเป็นพาธ public
+        file_path,
+        original_name,
+        uploaded_by,
+        created_at
       FROM program_uploads
       WHERE programme_id = $1
       ORDER BY created_at DESC

@@ -22,7 +22,7 @@ services:
     volumes:
       - .:/app               # โค้ดในเครื่อง → คอนเทนเนอร์ (hot-reload)
       - /app/node_modules    # กัน node_modules ไม่ให้โดนทับ
-      - uploads:/app/uploads
+      - ./uploads:/app/uploads 
     depends_on:
       - db
 
