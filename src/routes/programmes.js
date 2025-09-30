@@ -1,6 +1,6 @@
 import express from "express";
-import { pool } from "../db.js";            // ปรับให้ตรงของคุณ
-import { requireAdmin, requireAuth } from "../middleware/auth.js"; // ปรับให้ตรงของคุณ
+import { pool } from "../db.js";            
+import { requireAdmin, requireAuth } from "../middleware/auth.js"; 
 
 const router = express.Router();
 

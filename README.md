@@ -126,7 +126,7 @@ cat sql/001_add_programme_schedule.sql | docker compose exec -T db psql -U postg
 
 วิธี A (แนะนำ) — seed script
 
-docker compose exec -e ADMIN_EMAIL=admin2@example.com -e ADMIN_PASSWORD=Admin234! api node scripts/seed-admin.js
+docker compose exec -e ADMIN_EMAIL=admin1@example.com -e ADMIN_PASSWORD=admin123 api node scripts/seed-admin.js
 
 
 วิธี B — promote ผู้ใช้ที่สมัครไว้แล้ว
