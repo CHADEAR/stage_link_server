@@ -2,7 +2,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 
 const {
-  DB_HOST = "db",
+  DB_HOST = "localhost",
   DB_PORT = 5432,
   DB_USER = "appuser",
   DB_PASS = "secret123",

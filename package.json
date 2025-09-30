@@ -1,6 +1,16 @@
 {
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
-    "dotenv": "^17.2.1"
-  }
+    "dotenv": "^17.2.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "scripts": {
+    "dev": "nodemon --legacy-watch server/src/index.js",
+    "start": "node server/src/index.js",
+    "seed:admin": "node server/scripts/seed-admin.js"
+  },
+  "main": "server/src/index.js"
 }

@@ -6,12 +6,22 @@ import authRoutes from "./routes/auth.routes.js";
 import notesRoutes from "./routes/notes.routes.js";
 import errorHandler from "./middlewares/error.js";
 
+// โหวตเดิม
+import voteRoutes from "./routes/vote.routes.js";
+// ✅ ควบคุมเซอร์โว (spin-only / vote+spin / poll)
+import controlRoutes from "./routes/control.routes.js";
+
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// mount API
+app.use("/api/vote",    voteRoutes);
+app.use("/api/control", controlRoutes);
+
 // (ครั้งแรก) สร้างตารางที่จำเป็น
 async function init() {
+  // ตัวอย่างตารางเดิม
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notes (
       id SERIAL PRIMARY KEY,
@@ -20,6 +30,19 @@ async function init() {
     );
   `);
 
+  // เผื่อยังไม่มีตาราง votes
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS votes (
+      id BIGSERIAL PRIMARY KEY,
+      player TEXT NOT NULL,
+      value INTEGER NOT NULL,
+      source TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_votes_player_created ON votes(player, created_at DESC);`);
+
+  // ตารางสำหรับ reset password (ของคุณเดิม)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_resets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,10 +53,20 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_resets_expires ON password_resets(expires_at);`);
+
+  // ✅ ตารางคิวสั่งงานให้ ESP32 มาโพลล์
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS control_queue (
+      id BIGSERIAL PRIMARY KEY,
+      player TEXT NOT NULL,
+      led BOOLEAN NOT NULL DEFAULT true,  -- true = เปิดไฟ (โหวต), false = ไม่เปิดไฟ (spin-only)
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_control_queue_id ON control_queue(id);`);
 
   console.log("DB ready ✅");
 }
@@ -52,7 +85,7 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// routes
+// routes อื่น ๆ
 app.use("/auth", authRoutes);
 app.use("/notes", notesRoutes);
 
@@ -65,6 +98,11 @@ process.on("unhandledRejection", (e) => {
 });
 process.on("uncaughtException", (e) => {
   console.error("UNCAUGHT EXCEPTION:", e);
+});
+
+// ฟังทุก IP ในวงแลน/ฮอตสปอต
+app.listen(3000, "0.0.0.0", () => {
+  console.log("Server running at http://0.0.0.0:3000");
 });
 
 export default app;

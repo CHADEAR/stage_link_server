@@ -5,4 +5,8 @@ docker compose up -d --build
 docker compose ps
 
 # ดู log ของ API
-docker compose logs -f api
+docker compose logs -f apigi
+
+## run project
+' npm install '
+' npm run dev '
