@@ -1,25 +1,67 @@
+// src/routes/programmes.js
 import express from "express";
-import { pool } from "../lib/db.js";
+import { pool } from "../lib/db.js";              // <- path ของโปรเจกต์คุณ
 import { requireAuth, requireRole } from "../lib/auth.js";
 
 const router = express.Router();
 
 /**
  * GET /programmes
- * คืนลิสต์โปรแกรม (active เท่านั้น) พร้อมฟิลด์เวลา
- * หมายเหตุ: cover_image จะเป็น /uploads/<filename> ถ้ามีไฟล์อัปแล้ว
+ * ตัวกรอง (query string):
+ *  - date=YYYY-MM-DD           (ตรงวัน)
+ *  - date_from=YYYY-MM-DD&date_to=YYYY-MM-DD  (ช่วงวันที่)
+ *  - categories=news,variety   (คอมม่า) หรือ categories=news&categories=variety (ซ้ำคีย์ได้)
+ *  - limit, offset (ถ้าต้องการ)
  */
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const q = `
-      SELECT id, title, category, description, cover_image, is_active,
-             shoot_date, start_time, end_time,
-             created_at, updated_at
-      FROM programmes
-      WHERE is_active = TRUE
-      ORDER BY created_at DESC
+    const { date, date_from, date_to, limit, offset } = req.query;
+
+    // parse categories (รองรับ comma-separated และ multi-keys)
+    let cats = [];
+    const qCats = req.query.categories;
+    if (Array.isArray(qCats)) {
+      cats = qCats.flatMap(s => String(s).split(",")).map(s => s.trim()).filter(Boolean);
+    } else if (typeof qCats === "string") {
+      cats = qCats.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    const where = ["p.is_active = TRUE"];
+    const params = [];
+    const add = (sqlFrag, val) => { params.push(val); where.push(sqlFrag.replace("$$", `$${params.length}`)); };
+
+    if (date) {
+      add("p.shoot_date = $$::date", date);
+    } else if (date_from && date_to) {
+      params.push(date_from, date_to);
+      where.push(`p.shoot_date BETWEEN $${params.length-1}::date AND $${params.length}::date`);
+    } else if (date_from) {
+      add("p.shoot_date >= $$::date", date_from);
+    } else if (date_to) {
+      add("p.shoot_date <= $$::date", date_to);
+    }
+
+    if (cats.length) {
+      add("p.category = ANY($$::text[])", cats);
+    }
+
+    const lim = Number.isFinite(+limit) ? Math.max(1, Math.min(+limit, 200)) : 100;
+    const off = Number.isFinite(+offset) ? Math.max(0, +offset) : 0;
+
+    const sql = `
+      SELECT
+        p.id, p.title, p.category, p.description, p.cover_image, p.is_active,
+        p.shoot_date, p.start_time, p.end_time, p.created_at, p.updated_at
+      FROM programmes p
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY
+        p.shoot_date NULLS LAST,
+        p.start_time NULLS LAST,
+        p.created_at DESC
+      LIMIT ${lim} OFFSET ${off}
     `;
-    const { rows } = await pool.query(q);
+
+    const { rows } = await pool.query(sql, params);
     res.json(rows);
   } catch (err) {
     console.error("[GET /programmes] error:", err);
@@ -28,10 +70,10 @@ router.get("/", async (_req, res) => {
 });
 
 /**
- * POST /programmes  (admin)
+ * POST /programmes  (admin เท่านั้น)
  * body: { title, category?, description?, cover_image?, shoot_date?, start_time?, end_time? }
  */
-router.post("/", requireAuth, requireRole('admin'), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     const {
       title,
@@ -45,7 +87,6 @@ router.post("/", requireAuth, requireRole('admin'), async (req, res) => {
 
     if (!title) return res.status(400).json({ error: "title is required" });
 
-    // validate เบื้องต้น
     const dateOk = !shoot_date || /^\d{4}-\d{2}-\d{2}$/.test(shoot_date);
     const timeOk =
       (!start_time || /^\d{2}:\d{2}(:\d{2})?$/.test(start_time)) &&
@@ -68,22 +109,11 @@ router.post("/", requireAuth, requireRole('admin'), async (req, res) => {
   }
 });
 
-/**
- * GET /programmes/:id/uploads
- * คืนไฟล์ที่อัปโหลดของโปรแกรมนั้น ๆ
- * - url จะเป็นพาธสาธารณะเสมอ (/uploads/<filename>)
- */
+/** อัปโหลดของโปรแกรม */
 router.get("/:id/uploads", async (req, res) => {
   try {
     const q = `
-      SELECT
-        id,
-        programme_id,
-        '/uploads/' || file_path AS url,   -- คืนเป็นพาธ public
-        file_path,
-        original_name,
-        uploaded_by,
-        created_at
+      SELECT id, programme_id, file_path AS url, original_name, uploaded_by, created_at
       FROM program_uploads
       WHERE programme_id = $1
       ORDER BY created_at DESC
