@@ -12,6 +12,8 @@ import authRouter from './routes/auth.js';
 import programmesRouter from './routes/programmes.js';
 import usersRouter from './routes/users.js';
 import uploadsRouter from './routes/uploads.js';
+import voteRoutes from "./routes/vote.routes.js";
+import controlRoutes from "./routes/control.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,9 +61,15 @@ app.use('/programmes', programmesRouter);
 app.use('/users', usersRouter);
 app.use('/uploads', uploadsRouter);
 
+ // ✅ เส้นทางสำหรับหน้า Voter/ESP32 (แก้ชื่อเป็น /api/vote)
+app.use('/api/vote', voteRoutes);      // POST /api/vote/push, GET /api/vote/snapshot
+app.use('/api/control', controlRoutes); // POST /api/control/enqueue, GET /api/control/next
+
+
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.listen(PORT, () => {
   console.log(`[API] Listening on http://localhost:${PORT}`);
   console.log(`[API] Upload dir: ${UPLOAD_DIR}`);
 });
+
